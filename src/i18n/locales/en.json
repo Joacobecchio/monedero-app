@@ -1,0 +1,20 @@
+{
+"title": "Wallet",
+"deposits": "Deposits",
+"expenses": "Expenses",
+"balance": "Balance",
+"quick_add": "Quick add",
+"add": "Add",
+"deposit": "Deposit",
+"expense": "Expense",
+"onboarding_title": "First-time setup",
+"select_country": "Which country are you in?",
+"select_currency": "Which currency do you want?",
+"select_language": "Which language do you prefer?",
+"continue": "Continue",
+"settings": "Settings",
+"theme": "Theme",
+"system": "System",
+"light": "Light",
+"dark": "Dark"
+}

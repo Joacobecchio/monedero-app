@@ -1,0 +1,20 @@
+{
+"title": "Monedero",
+"deposits": "Depósitos",
+"expenses": "Gastos",
+"balance": "Balance",
+"quick_add": "Carga rápida",
+"add": "Agregar",
+"deposit": "Depósito",
+"expense": "Gasto",
+"onboarding_title": "Configuración inicial",
+"select_country": "¿De qué país sos?",
+"select_currency": "¿Qué moneda querés usar?",
+"select_language": "¿En qué idioma querés la app?",
+"continue": "Continuar",
+"settings": "Configuración",
+"theme": "Tema",
+"system": "Sistema",
+"light": "Claro",
+"dark": "Oscuro"
+}
