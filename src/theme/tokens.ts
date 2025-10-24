@@ -14,6 +14,7 @@ export type Palette = {
   // Estados
   danger: string;
   success: string;
+  onDanger?: string;   // opcional, no siempre se usa
 };
 
 export const LIGHT: Palette = {

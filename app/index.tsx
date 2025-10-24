@@ -6,10 +6,9 @@ import {
   Pressable,
   Animated,
   Easing,
-  Alert,
   Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { Calendar } from "react-native-calendars";
@@ -19,7 +18,9 @@ import { ThemedView, ThemedText } from "../src/ui/Themed";
 import { useTheme } from "../src/theme/theme";
 import { loadPrefs, type Prefs } from "../src/store/prefs";
 import { useWallet } from "../src/store/wallet";
-import type { Tx } from "../src/db/adapter";
+import { ScreenHeader } from "../src/ui/ScreenHeader";
+import { useTranslation } from "react-i18next";
+import { useAuth } from "../src/auth/AuthProvider";
 
 /* ---------------- utils ---------------- */
 function formatAmount(
@@ -53,6 +54,136 @@ function todayIso(): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/* ------- Modal de confirmación ------- */
+function ConfirmDialog({
+  visible,
+  title,
+  message,
+  cancelText,
+  confirmText,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  title: string;
+  message?: string;
+  cancelText: string;
+  confirmText: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { tokens } = useTheme();
+  if (!visible) return null;
+
+  return (
+    <Pressable
+      onPress={onCancel}
+      style={{
+        position: "absolute",
+        inset: 0 as any,
+        backgroundColor: "rgba(0,0,0,0.45)",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <Pressable
+        onPress={() => {}}
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          borderRadius: 16,
+          backgroundColor: tokens.card,
+          overflow: "hidden",
+        }}
+      >
+        <View style={{ padding: 16, gap: 6 }}>
+          <ThemedText style={{ fontSize: 18, fontWeight: "800" }}>{title}</ThemedText>
+          {message ? (
+            <ThemedText style={{ opacity: 0.8 }}>{message}</ThemedText>
+          ) : null}
+        </View>
+
+        <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.06)" }} />
+
+        <View style={{ flexDirection: "row" }}>
+          <Pressable
+            onPress={onCancel}
+            style={{ flex: 1, padding: 14, alignItems: "center" }}
+          >
+            <ThemedText style={{ fontWeight: "700" }}>{cancelText}</ThemedText>
+          </Pressable>
+          <View style={{ width: 1, backgroundColor: "rgba(255,255,255,0.06)" }} />
+          <Pressable
+            onPress={onConfirm}
+            style={{ flex: 1, padding: 14, alignItems: "center" }}
+          >
+            <ThemedText style={{ fontWeight: "700", color: "#ef4444" }}>
+              {confirmText}
+            </ThemedText>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Pressable>
+  );
+}
+
+/* ------- ActionSheet (Editar / Eliminar) ------- */
+function ActionSheet({
+  visible,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { tokens } = useTheme();
+  const { t } = useTranslation();
+  if (!visible) return null;
+
+  return (
+    <Pressable
+      onPress={onClose}
+      style={{
+        position: "absolute",
+        inset: 0 as any,
+        backgroundColor: "rgba(0,0,0,0.45)",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <Pressable
+        onPress={() => {}}
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          borderRadius: 16,
+          backgroundColor: tokens.card,
+          overflow: "hidden",
+        }}
+      >
+        <Pressable onPress={onEdit} style={{ padding: 16, alignItems: "center" }}>
+          <ThemedText style={{ fontWeight: "700" }}>{t("common.edit")}</ThemedText>
+        </Pressable>
+        <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.06)" }} />
+        <Pressable onPress={onDelete} style={{ padding: 16, alignItems: "center" }}>
+          <ThemedText style={{ fontWeight: "700", color: "#ef4444" }}>
+            {t("common.delete")}
+          </ThemedText>
+        </Pressable>
+        <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.06)" }} />
+        <Pressable onPress={onClose} style={{ padding: 16, alignItems: "center" }}>
+          <ThemedText style={{ fontWeight: "700" }}>{t("common.cancel")}</ThemedText>
+        </Pressable>
+      </Pressable>
+    </Pressable>
+  );
 }
 
 /* ------- Modal simple para ver el número completo ------- */
@@ -120,7 +251,7 @@ function AmountModal({
   );
 }
 
-/* ------- Card de totales (abre modal) ------- */
+/* ------- Card de totales ------- */
 function StatCard({
   label,
   valueCents,
@@ -158,8 +289,47 @@ function StatCard({
 
 /* ---------------- screen ---------------- */
 export default function Home() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { tokens } = useTheme();
+  const { t } = useTranslation();
+  const { signOut } = useAuth();
+
+  const [menuOpen, setMenuOpen] = React.useState(false);
+
+  const goSettings = () => {
+    setMenuOpen(false);
+    router.push("/settings");
+  };
+
+  const doSignOut = async () => {
+    setMenuOpen(false);
+    try {
+      await signOut();
+    } catch {}
+  };
+
+  // hoja de acciones
+  const [sheetTxId, setSheetTxId] = React.useState<string | null>(null);
+  function openActions(txId: string) {
+    setSheetTxId(txId);
+  }
+  const removeTx = useWallet((s) => s.removeTx);
+  function handleEdit() {
+    if (!sheetTxId) return;
+    router.push({ pathname: "/add-transaction", params: { id: sheetTxId } });
+  }
+
+  // confirmación de borrado
+  const [confirm, setConfirm] = React.useState<{ visible: boolean; id?: string }>({
+    visible: false,
+  });
+  function handleDelete() {
+    if (!sheetTxId) return;
+    const id = sheetTxId;
+    setSheetTxId(null);
+    setConfirm({ visible: true, id });
+  }
 
   // wallet store
   const month = useWallet((s) => s.month);
@@ -170,19 +340,13 @@ export default function Home() {
   const setMonth = useWallet((s) => s.setMonth);
   const setSelected = useWallet((s) => s.setSelected);
 
-  // NUEVO: acciones (editar/eliminar)
-  const removeTx = useWallet((s) => s.removeTx);
-
-  // prefs + modal
+  // prefs + modal de totales
   const [prefs, setPrefs] = React.useState<Prefs | null>(null);
   const [amountModal, setAmountModal] = React.useState<{
     title: string;
     value: string;
     tint?: string;
   } | null>(null);
-
-  // NUEVO: estado del modal de acciones
-  const [actionsFor, setActionsFor] = React.useState<Tx | null>(null);
 
   // cargar prefs + init DB/store al enfocar
   useFocusEffect(
@@ -206,13 +370,13 @@ export default function Home() {
     }, [init])
   );
 
-  // --- FIX de arranque: sincronizar una sola vez a HOY ---
+  // --- arranque: sincronizar a HOY ---
   const bootSynced = React.useRef(false);
   React.useEffect(() => {
     if (bootSynced.current) return;
 
-    const tm = thisMonth(); // 'YYYY-MM' actual
-    const td = todayIso();  // 'YYYY-MM-DD' hoy
+    const tm = thisMonth();
+    const td = todayIso();
 
     if (!month || !/^\d{4}-\d{2}$/.test(month) || month !== tm) {
       setMonth(tm);
@@ -224,18 +388,18 @@ export default function Home() {
     bootSynced.current = true;
   }, [month, selected, setMonth, setSelected]);
 
-  // (opcional) mantener month alineado con selected si cambia por otra vía
+  // mantener month alineado con selected
   React.useEffect(() => {
     const mFromSel = (selected || "").slice(0, 7);
     if (mFromSel && mFromSel !== month) setMonth(mFromSel);
   }, [selected, month, setMonth]);
 
-  // fallbacks defensivos para el render
+  // fallbacks
   const monthSafe = /^\d{4}-\d{2}$/.test(month || "") ? (month as string) : thisMonth();
   const selectedSafe =
     /^\d{4}-\d{2}-\d{2}$/.test(selected || "") ? (selected as string) : `${monthSafe}-01`;
 
-  // El mes que mostramos siempre lo derivamos de la fecha seleccionada
+  // mes mostrado derivado de selected
   const displayMonth = selectedSafe.slice(0, 7);
   const currentStr = `${displayMonth}-15`;
 
@@ -258,8 +422,8 @@ export default function Home() {
     return m;
   }, [byDay, selected, tokens.primary]);
 
-  /* -------- Header con cards -------- */
-  function Header() {
+  /* -------- Stats (solo tarjetas) -------- */
+  const StatsRow = () => {
     const totals = byDay?.[selected || ""] || { income: 0, expense: 0 };
     const currency = (prefs?.currency ?? "ARS") as "ARS" | "USD";
     const incomeCents = totals.income || 0;
@@ -268,125 +432,96 @@ export default function Home() {
 
     const openAmount = (title: string, cents: number) => {
       const tint = cents < 0 ? "#ef4444" : cents > 0 ? "#22c55e" : undefined;
-      setAmountModal({ title, value: formatAmount(cents, currency, { sign: "auto" }), tint });
+      setAmountModal({
+        title,
+        value: formatAmount(cents, currency, { sign: "auto" }),
+        tint,
+      });
     };
 
     return (
-      <ThemedView style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14, gap: 8 }}>
-        <ThemedText style={{ fontSize: 28, fontWeight: "800" }}>Monedero</ThemedText>
-
+      <ThemedView style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
         <View style={{ flexDirection: "row", gap: 10 }}>
           <StatCard
-            label="Depósitos"
+            label={t("home.deposits")}
             valueCents={incomeCents}
             currency={currency}
-            onPress={() => openAmount("Depósitos", incomeCents)}
+            onPress={() => openAmount(t("home.deposits"), incomeCents)}
           />
-          <StatCard
-            label="Gastos"
+        <StatCard
+            label={t("home.expenses")}
             valueCents={-expenseCents}
             currency={currency}
-            onPress={() => openAmount("Gastos", -expenseCents)}
+            onPress={() => openAmount(t("home.expenses"), -expenseCents)}
           />
           <StatCard
-            label="Balance"
+            label={t("home.balance")}
             valueCents={balanceCents}
             currency={currency}
-            onPress={() => openAmount("Balance", balanceCents)}
+            onPress={() => openAmount(t("home.balance"), balanceCents)}
           />
         </View>
       </ThemedView>
     );
-  }
-
-  /* -------- NUEVO: Modal de acciones por movimiento -------- */
-  function ActionsModal() {
-    if (!actionsFor) return null;
-    const tx = actionsFor;
-
-    const onEdit = () => {
-      setActionsFor(null);
-      router.push({ pathname: "/add-transaction", params: { id: tx.id } });
-    };
-
-    const onDelete = () => {
-      Alert.alert(
-        tx.type === "DEPOSIT" ? "Eliminar depósito" : "Eliminar gasto",
-        "¿Querés eliminar este movimiento?",
-        [
-          { text: "No", style: "cancel" },
-          {
-            text: "Sí, eliminar",
-            style: "destructive",
-            onPress: async () => {
-              await removeTx(tx.id);
-              setActionsFor(null);
-            },
-          },
-        ]
-      );
-    };
-
-    return (
-      <Modal transparent animationType="fade" visible onRequestClose={() => setActionsFor(null)}>
-        <Pressable
-          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }}
-          onPress={() => setActionsFor(null)}
-        />
-        <ThemedView
-          style={{
-            position: "absolute",
-            left: 16,
-            right: 16,
-            bottom: 24,
-            borderRadius: 16,
-            padding: 12,
-            gap: 6,
-            backgroundColor: tokens.card,
-          }}
-        >
-          <Pressable
-            onPress={onEdit}
-            style={{ paddingVertical: 12, alignItems: "center" }}
-          >
-            <ThemedText style={{ fontWeight: "700" }}>Editar</ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={onDelete}
-            style={{ paddingVertical: 12, alignItems: "center" }}
-          >
-            <ThemedText style={{ fontWeight: "700", color: "#ef4444" }}>
-              Eliminar
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setActionsFor(null)}
-            style={{ paddingVertical: 12, alignItems: "center" }}
-          >
-            <ThemedText style={{ opacity: 0.8 }}>Cancelar</ThemedText>
-          </Pressable>
-        </ThemedView>
-      </Modal>
-    );
-  }
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }}>
-      {/* top bar minimal (solo ⚙️ a la derecha) */}
-      <View style={{ paddingHorizontal: 16, paddingVertical: 8, flexDirection: "row", alignItems: "center" }}>
-        <ThemedText style={{ fontSize: 18, fontWeight: "700", flex: 1 }}> </ThemedText>
-        <Pressable onPress={() => router.push("/settings")} hitSlop={10} style={{ padding: 6 }}>
+      {/* Top bar — sin título, solo engranaje */}
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingVertical: 8,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "flex-end",
+        }}
+      >
+        <Pressable onPress={() => setMenuOpen(true)} hitSlop={10} style={{ padding: 6 }}>
           <Ionicons name="settings-outline" size={22} color={tokens.text} />
         </Pressable>
       </View>
 
+      {/* Menú popup */}
+      <Modal transparent visible={menuOpen} animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "#0006" }} onPress={() => setMenuOpen(false)}>
+          <ThemedView
+            style={{
+              position: "absolute",
+              top: insets.top + 44,
+              right: 12,
+              backgroundColor: tokens.card,
+              borderRadius: 12,
+              paddingVertical: 6,
+              width: 220,
+              shadowColor: "#000",
+              shadowOpacity: 0.25,
+              shadowRadius: 10,
+              elevation: 6,
+            }}
+          >
+            <Pressable onPress={goSettings} style={{ paddingVertical: 12, paddingHorizontal: 14 }}>
+              <ThemedText style={{ fontWeight: "700" }}>{t("common.settings")}</ThemedText>
+            </Pressable>
+            <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.06)" }} />
+            <Pressable onPress={doSignOut} style={{ paddingVertical: 12, paddingHorizontal: 14 }}>
+              <ThemedText style={{ fontWeight: "700", color: "#ef4444" }}>
+                {t("auth.signOut")}
+              </ThemedText>
+            </Pressable>
+          </ThemedView>
+        </Pressable>
+      </Modal>
+
+      {/* Lista + header */}
       <FlatList
         ListHeaderComponent={
           <>
-            <Header />
+            <ScreenHeader title={t("home.title")} />
+            <StatsRow />
             <Calendar
-              key={displayMonth}               // fuerza remount cuando cambia el mes mostrado
-              current={currentStr}
+              key={displayMonth}
+              current={`${displayMonth}-15`}
               markedDates={marked}
               theme={{
                 calendarBackground: tokens.background,
@@ -402,14 +537,14 @@ export default function Home() {
               onMonthChange={(m) => {
                 const mStr = `${m.year}-${String(m.month).padStart(2, "0")}`;
                 setMonth(mStr);
-                const t = todayIso();
-                setSelected(t.startsWith(mStr) ? t : `${mStr}-01`);
+                const tday = todayIso();
+                setSelected(tday.startsWith(mStr) ? tday : `${mStr}-01`);
               }}
               style={{ marginHorizontal: 8, borderRadius: 12, overflow: "hidden" }}
             />
 
             <ThemedText style={{ paddingHorizontal: 16, paddingTop: 14, fontWeight: "700" }}>
-              Movimientos del {selectedSafe}
+              {t("home.movementsOf", { date: selectedSafe })}
             </ThemedText>
           </>
         }
@@ -420,25 +555,26 @@ export default function Home() {
           const currency = (prefs?.currency as "ARS" | "USD") ?? "ARS";
           const isDeposit = item.type === "DEPOSIT";
 
-          // Íconos por categoría (extraídos del [Categoría] en descripción)
-          const categoryIcons: Record<string, keyof typeof Ionicons.glyphMap> = {
-            Sueldo: "cash",
-            Transferencia: "swap-horizontal",
-            Ahorros: "wallet",
-            Comida: "fast-food",
-            Salud: "medkit",
-            Facturas: "document-text",
-            Compras: "cart",
-            Transporte: "car",
-            Otros: "ellipsis-horizontal-circle",
+          // Íconos por categoría (lee lo que guardaste entre [ ])
+          const categoryAliases: Record<string, keyof typeof Ionicons.glyphMap> = {
+            Sueldo: "cash", Salary: "cash",
+            Transferencia: "swap-horizontal", Transfer: "swap-horizontal",
+            Ahorros: "wallet", Savings: "wallet",
+            Comida: "fast-food", Food: "fast-food",
+            Salud: "medkit", Health: "medkit",
+            Facturas: "document-text", Bills: "document-text",
+            Compras: "cart", Shopping: "cart",
+            Transporte: "car", Transport: "car",
+            Otros: "ellipsis-horizontal-circle", Other: "ellipsis-horizontal-circle",
           };
           const match = item.description?.match(/\[(.*?)\]/);
-          const category = match ? match[1] : null;
-          const iconName = category ? categoryIcons[category] : null;
+          const categoryRaw = match ? match[1] : null;
+          const iconName = categoryRaw ? categoryAliases[categoryRaw] : null;
+
           const cleanDescription = item.description?.replace(/\s*\[.*?\]\s*/g, "");
 
           return (
-            <Pressable onLongPress={() => setActionsFor(item)} delayLongPress={250}>
+            <Pressable onPress={() => openActions(item.id)}>
               <ThemedView
                 style={{
                   backgroundColor: tokens.card,
@@ -460,7 +596,7 @@ export default function Home() {
 
                 <View style={{ flex: 1 }}>
                   <ThemedText style={{ fontWeight: "700" }}>
-                    {isDeposit ? "Depósito" : "Gasto"}
+                    {isDeposit ? t("tx.deposit") : t("tx.expense")}
                   </ThemedText>
                   {cleanDescription ? (
                     <ThemedText style={{ opacity: 0.8 }}>{cleanDescription}</ThemedText>
@@ -471,13 +607,55 @@ export default function Home() {
                   style={{
                     fontWeight: "700",
                     color: isDeposit ? "#22c55e" : "#ef4444",
+                    marginRight: 6,
                   }}
                 >
                   {isDeposit ? "+" : "-"} {formatAmount(item.amount_cents, currency)}
                 </ThemedText>
+
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => openActions(item.id)}
+                  style={{ paddingHorizontal: 6, paddingVertical: 4 }}
+                >
+                  <Ionicons name="ellipsis-horizontal" size={18} color={tokens.text} />
+                </Pressable>
               </ThemedView>
             </Pressable>
           );
+        }}
+        ListEmptyComponent={
+          <ThemedText style={{ opacity: 0.6, textAlign: "center", marginTop: 24 }}>
+            {t("home.noMovements")}
+          </ThemedText>
+        }
+      />
+
+      {/* Modal para ver números completos */}
+      <AmountModal data={amountModal} onClose={() => setAmountModal(null)} />
+
+      {/* Hoja de acciones: Editar / Eliminar */}
+      <ActionSheet
+        visible={!!sheetTxId}
+        onClose={() => setSheetTxId(null)}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+      />
+
+      {/* Confirmación de borrado */}
+      <ConfirmDialog
+        visible={confirm.visible}
+        title={t("home.deleteConfirmTitle")}
+        message={t("home.deleteConfirmMsg")}
+        cancelText={t("common.cancel")}
+        confirmText={t("common.delete")}
+        onCancel={() => setConfirm({ visible: false })}
+        onConfirm={async () => {
+          const id = confirm.id!;
+          setConfirm({ visible: false });
+          try {
+            await removeTx(id);
+          } catch {}
         }}
       />
 
@@ -494,16 +672,15 @@ export default function Home() {
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: tokens.primary,
+          zIndex: 20,
+          elevation: 6,
         }}
+        hitSlop={10}
       >
-        <ThemedText style={{ fontSize: 28, fontWeight: "800", color: tokens.onPrimary ?? "#111" }}>+</ThemedText>
+        <ThemedText style={{ fontSize: 28, fontWeight: "800", color: tokens.onPrimary ?? "#111" }}>
+          +
+        </ThemedText>
       </Pressable>
-
-      {/* Modal para ver números completos */}
-      <AmountModal data={amountModal} onClose={() => setAmountModal(null)} />
-
-      {/* NUEVO: modal de acciones editar/eliminar */}
-      <ActionsModal />
     </SafeAreaView>
   );
 }

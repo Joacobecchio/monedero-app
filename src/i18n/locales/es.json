@@ -1,20 +1,134 @@
 {
-"title": "Monedero",
-"deposits": "Depósitos",
-"expenses": "Gastos",
-"balance": "Balance",
-"quick_add": "Carga rápida",
-"add": "Agregar",
-"deposit": "Depósito",
-"expense": "Gasto",
-"onboarding_title": "Configuración inicial",
-"select_country": "¿De qué país sos?",
-"select_currency": "¿Qué moneda querés usar?",
-"select_language": "¿En qué idioma querés la app?",
-"continue": "Continuar",
-"settings": "Configuración",
-"theme": "Tema",
-"system": "Sistema",
-"light": "Claro",
-"dark": "Oscuro"
+  "common": {
+    "country": "País",
+    "currency": "Moneda",
+    "language": "Idioma",
+    "save": "Guardar",
+    "spanish": "Español",
+    "english": "Ingles",
+    "start": "Comenzar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "done": "Listo",
+    "settings": "Configuración"
+  },
+  "auth": {
+  "signOut": "Cerrar sesión",
+  "loginTitle": "Iniciar sesión",
+  "loginSubtitle": "Entrá para seguir con tu monedero",
+  "email": "Email",
+  "password": "Contraseña",
+  "forgot": "¿Olvidaste tu contraseña?",
+  "noAccount": "¿No tenés cuenta?",
+  "emailPlaceholder": "tu@email.com",
+  "createOne": "Crear una",
+  "signIn": "Ingresar",
+  "resetTitle": "Restablecer contraseña",
+  "resetSent": "Te enviamos un email para restablecer tu contraseña.",
+  "resetEmailSent": "Te enviamos un email para restablecer tu contraseña.",
+  "emailLabel": "Email",
+  "resetButton": "Enviar enlace",
+  "resetEmailFailed": "No pudimos enviar el email.",
+  "resetEmailRequired": "Ingresá tu email.",
+  "resetSubtitle": "Ingresá tu email y te enviaremos un enlace para cambiarla."
+  },
+  "onboarding": {
+    "title": "¡Bienvenido!",
+    "subtitle": "Configurá lo básico para arrancar."
+  },
+  "add": {
+    "newDeposit": "Nuevo depósito",
+    "newExpense": "Nuevo gasto",
+    "editDeposit": "Editar depósito",
+    "editExpense": "Editar gasto",
+    "amount": "Monto",
+    "descPlaceholder": "Descripción (opcional)",
+    "selectCategory": "Seleccioná una categoría"
+  },
+  "actions": {
+    "deleteConfirmTitleDeposit": "Eliminar depósito",
+    "deleteConfirmTitleExpense": "Eliminar gasto",
+    "deleteConfirmMsg": "¿Querés eliminar este movimiento?"
+  },
+  "tx": {
+    "deposit": "Depósito",
+    "expense": "Gasto",
+    "newDeposit": "Nuevo depósito",
+    "newExpense": "Nuevo gasto",
+    "editDeposit": "Editar depósito",
+    "editExpense": "Editar gasto",
+    "amount": "Monto",
+    "selectCategory": "Seleccioná una categoría",
+    "descriptionOptional": "Descripción (opcional)",
+    "remainingChars": "caracteres",
+    "save": "Guardar",
+    "saveChanges": "Guardar cambios",
+    "saving": "Guardando..."
+  },
+  "categories": {
+    "salary": "Sueldo",
+    "transfer": "Transferencia",
+    "savings": "Ahorros",
+    "food": "Comida",
+    "health": "Salud",
+    "bills": "Facturas",
+    "shopping": "Compras",
+    "transport": "Transporte",
+    "other": "Otros"
+  },
+  "settings": {
+    "title": "Configuración",
+    "country": "País",
+    "currency": "Moneda",
+    "language": "Idioma",
+    "save": "Guardar",
+    "restartOnboarding": "Reiniciar Onboarding",
+    "chooseCountry": "Elegí tu país",
+    "saved": "Cambios guardados ✅",
+    "deleteAccount": "Borrar cuenta",
+    "deleteConfirmTitle": "Borrar cuenta",
+    "deleteConfirmMsg": "Esto eliminará tu información de forma permanente. No vas a poder iniciar sesión con este email a menos que te registres otra vez. ¿Continuar?",
+    "deleteSuccess": "Tu cuenta fue eliminada.",
+    "deleteError": "No pudimos eliminar tu cuenta."
+  },
+  "languages": {
+    "spanish": "Español",
+    "english": "English"
+  },
+  "countries": {
+    "AR": "Argentina",
+    "UY": "Uruguay",
+    "CL": "Chile",
+    "PE": "Perú",
+    "MX": "México",
+    "ES": "España",
+    "US": "Estados Unidos"
+  },
+  "errors": {
+    "required": "Este campo es obligatorio",
+    "amountPositive": "El monto debe ser mayor a 0",
+    "categoryRequired": "Seleccioná una categoría"
+  },
+  "buttons": {
+    "save": "Guardar",
+    "saveChanges": "Guardar cambios",
+    "cancel": "Cancelar",
+    "done": "Listo"
+  },
+  "expenses": {
+    "food": "Comida",
+    "health": "Salud",
+    "bills": "Facturas",
+    "shopping": "Compras"
+  },
+  "home": {
+    "title": "Monedero",
+    "deposits": "Depósitos",
+    "expenses": "Gastos",
+    "balance": "Balance",
+    "movementsOf": "Movimientos del {{date}}",
+    "deleteConfirmTitle": "Eliminar movimiento",
+    "deleteConfirmMsg": "¿Estás seguro de eliminar esta transacción? Esta acción no se puede deshacer."
+  }
 }

@@ -1,352 +1,283 @@
-// app/add-transaction.tsx
 import React from "react";
 import {
-  View,
-  Keyboard,
-  KeyboardAvoidingView,
   Platform,
-  Pressable,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
+  View,
   ScrollView,
+  Pressable,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useTranslation } from "react-i18next";
 
 import { ThemedView, ThemedText } from "../src/ui/Themed";
-import Button from "../src/ui/Button";
 import Input from "../src/ui/Input";
+import Button from "../src/ui/Button";
 import { useTheme } from "../src/theme/theme";
+import { loadPrefs, type Prefs } from "../src/store/prefs";
 import { useWallet } from "../src/store/wallet";
-import { loadPrefs } from "../src/store/prefs";
+import i18n from "../src/i18n";
 
-type TxKind = "DEPOSIT" | "EXPENSE";
+/* ------------------ categorías ------------------ */
+const DEPOSIT_CATS = [
+  { key: "salary", icon: "cash" as const, labelES: "Sueldo", labelEN: "Salary" },
+  { key: "transfer", icon: "swap-horizontal" as const, labelES: "Transferencia", labelEN: "Transfer" },
+  { key: "savings", icon: "wallet" as const, labelES: "Ahorros", labelEN: "Savings" },
+];
+const EXPENSE_CATS = [
+  { key: "food", icon: "fast-food" as const, labelES: "Comida", labelEN: "Food" },
+  { key: "health", icon: "medkit" as const, labelES: "Salud", labelEN: "Health" },
+  { key: "bills", icon: "document-text" as const, labelES: "Facturas", labelEN: "Bills" },
+  { key: "shopping", icon: "cart" as const, labelES: "Compras", labelEN: "Shopping" },
+];
 
-interface CategoryOption {
-  label: string;
-  value: string;
-  icon:
-    | keyof typeof Ionicons.glyphMap
-    | keyof typeof MaterialCommunityIcons.glyphMap;
+/* ------------- helpers moneda <-> centavos ------------- */
+function nfFor(currency: "ARS" | "USD", lang: string) {
+  const locale = lang?.startsWith("es") ? "es-AR" : "en-US";
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    currencyDisplay: "narrowSymbol",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-/** YYYY-MM-DD -> timestamp local (mediodía para evitar TZ/DST weirdness) */
-function isoDayToLocalMs(isoDay: string) {
-  const [y, m, d] = isoDay.split("-").map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0, 0).getTime();
+function formatMoney(cents: number, currency: "ARS" | "USD", lang: string) {
+  try {
+    return nfFor(currency, lang).format(cents / 100);
+  } catch {
+    const sign = cents < 0 ? "-" : "";
+    const symb = currency === "USD" ? "US$" : "$";
+    return `${sign}${symb} ${(Math.abs(cents) / 100).toFixed(2)}`;
+  }
 }
 
-/** 123456 -> "123.456" */
-function formatThousands(n: number) {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+/** Convierte texto (con símbolos/puntos/comas) a centavos enteros */
+function parseToCents(input: string) {
+  const digits = (input || "").replace(/[^\d]/g, "");
+  if (!digits) return 0;
+  return parseInt(digits, 10);
 }
 
 export default function AddTransaction() {
+  const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { tokens } = useTheme();
+  const { t } = useTranslation();
 
-  // store
-  const selected = useWallet((s) => s.selected);
-  const month = useWallet((s) => s.month);
-  const setMonth = useWallet((s) => s.setMonth);
-  const setSelected = useWallet((s) => s.setSelected);
+  // Si venís a editar: /add-transaction?id=xxx (opcional)
+  const { id } = useLocalSearchParams<{ id?: string }>();
 
+  const [prefs, setPrefs] = React.useState<Prefs | null>(null);
+  React.useEffect(() => {
+    (async () => setPrefs(await loadPrefs()))();
+  }, []);
+
+  // Store wallet
   const addTx = useWallet((s) => s.addTx);
-  const getTx = useWallet((s) => s.getTx);
-  const updateTx = useWallet((s) => s.updateTx);
+  const daySelected = useWallet((s) => s.selected);
 
-  // params (modo edición si viene id)
-  const params = useLocalSearchParams<{ id?: string }>();
-  const txId = params?.id as string | undefined;
-
-  // ui state
-  const [kind, setKind] = React.useState<TxKind>("DEPOSIT");
-  const [amount, setAmount] = React.useState(""); // visual con puntos
-  const [desc, setDesc] = React.useState("");
+  // UI state
+  const [type, setType] = React.useState<"DEPOSIT" | "EXPENSE">("DEPOSIT");
+  const [amountCents, setAmountCents] = React.useState(0);
+  const [amountDisplay, setAmountDisplay] = React.useState("");
   const [category, setCategory] = React.useState<string | null>(null);
+  const [desc, setDesc] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
 
-  // 💰 Categorías visuales
-  const depositCategories: CategoryOption[] = [
-    { label: "Sueldo", value: "Sueldo", icon: "cash" },
-    { label: "Transferencia", value: "Transferencia", icon: "swap-horizontal" },
-    { label: "Ahorros", value: "Ahorros", icon: "wallet" },
-  ];
-  const expenseCategories: CategoryOption[] = [
-    { label: "Comida", value: "Comida", icon: "fast-food" },
-    { label: "Salud", value: "Salud", icon: "medkit" },
-    { label: "Facturas", value: "Facturas", icon: "document-text" },
-    { label: "Compras", value: "Compras", icon: "cart" },
-    { label: "Transporte", value: "Transporte", icon: "car" },
-    { label: "Otros", value: "Otros", icon: "ellipsis-horizontal-circle" },
-  ];
-  const categories = kind === "DEPOSIT" ? depositCategories : expenseCategories;
+  const CATS = type === "DEPOSIT" ? DEPOSIT_CATS : EXPENSE_CATS;
 
-  // 🔢 Formateo visual del número (solo dígitos + separador de miles .)
-  const formatNumber = (text: string) => {
-    const clean = text.replace(/\D/g, "");
-    const formatted = clean.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-    setAmount(formatted);
-  };
-  const parseToCents = (formatted: string) => {
-    const numeric = Number(formatted.replace(/\./g, ""));
-    return numeric * 100;
-  };
+  const currency = (prefs?.currency ?? "ARS") as "ARS" | "USD";
+  const lang = i18n.language || "es-AR";
 
-  const valid =
-    !!amount &&
-    Number(amount.replace(/\./g, "")) > 0 &&
-    !!category &&
-    !saving;
+  // ✅ validación
+  const isValid = amountCents > 0 && !!category;
 
-  // Prefill si estamos editando
   React.useEffect(() => {
-    (async () => {
-      if (!txId) return;
-      const tx = await getTx(txId);
-      if (!tx) return;
+    setAmountDisplay(formatMoney(amountCents, currency, lang));
+  }, [currency, lang]);
 
-      // tipo
-      setKind(tx.type as TxKind);
+  function handleAmountChange(txt: string) {
+    const cents = parseToCents(txt);
+    setAmountCents(cents);
+    setAmountDisplay(formatMoney(cents, currency, lang));
+  }
 
-      // monto (a enteros con puntos)
-      const units = Math.round(tx.amount_cents / 100); // asumiendo sin centavos
-      setAmount(formatThousands(units));
-
-      // categoría desde descripción "[Categoria]"
-      let cat: string | null = null;
-      if (tx.description) {
-        const m = tx.description.match(/\[(.+?)\]\s*$/);
-        if (m) cat = m[1];
-      }
-      setCategory(cat);
-
-      // descripción limpia
-      setDesc(tx.description ? tx.description.replace(/\s*\[.+\]\s*$/, "") : "");
-    })();
-  }, [txId, getTx]);
-
-  const onSave = async () => {
-    if (!valid) return;
+  async function handleSave() {
+    if (!isValid) return;
+    setSaving(true);
     try {
-      setSaving(true);
-      Keyboard.dismiss();
-
-      const prefs = await loadPrefs();
-      const currency = (prefs?.currency as "ARS" | "USD") ?? "ARS";
-      const description =
-        desc ? `${desc} [${category}]` : category ? `[${category}]` : undefined;
-
-      if (txId) {
-        // EDITAR: mantenemos occurred_at original (si querés editar fecha, lo sumamos luego)
-        await updateTx(txId, {
-          type: kind,
-          amount_cents: parseToCents(amount),
-          currency,
-          description,
-        });
-      } else {
-        // NUEVO: usar día seleccionado (o hoy si no hay)
-        const occurredAt = selected ? isoDayToLocalMs(selected) : Date.now();
-
-        // si el mes del seleccionado difiere del cargado, sincronizamos
-        const selMonth = (selected ?? "").slice(0, 7);
-        if (selMonth && selMonth !== month) {
-          await setMonth(selMonth);
-          await setSelected(selected!);
-        }
-
-        await addTx({
-          type: kind,
-          amount_cents: parseToCents(amount),
-          currency,
-          description,
-          occurred_at: occurredAt,
-        });
+      let finalDesc = desc?.trim() || "";
+      if (category) {
+        const catObj = [...DEPOSIT_CATS, ...EXPENSE_CATS].find((c) => c.key === category);
+        const label = catObj ? (lang.startsWith("es") ? catObj.labelES : catObj.labelEN) : category;
+        finalDesc = finalDesc ? `${finalDesc} [${label}]` : `[${label}]`;
       }
+
+      await addTx({
+        type,
+        amount_cents: amountCents,
+        currency,
+        description: finalDesc || undefined,
+        occurred_at: daySelected ? new Date(daySelected + "T00:00:00").getTime() : Date.now(),
+      });
 
       router.back();
+    } catch (e) {
+      console.error("Error saving tx", e);
     } finally {
       setSaving(false);
     }
-  };
-
-  // Si cambiás el tipo en edición y la categoría no aplica, la limpiamos
-  React.useEffect(() => {
-    if (!category) return;
-    const pool = kind === "DEPOSIT" ? depositCategories : expenseCategories;
-    if (!pool.find((c) => c.value === category)) {
-      setCategory(null);
-    }
-  }, [kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   return (
-    <ThemedView style={{ flex: 1, backgroundColor: tokens.background }}>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: tokens.background,
+        paddingTop: insets.top + 14, // 👈 mejora visual
+      }}
+    >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={insets.top + 56}
       >
-        <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{
-              paddingTop: insets.top + 12,
-              paddingBottom: insets.bottom + 24,
-              paddingHorizontal: 16,
-              gap: 20,
-            }}
-          >
-            {/* Título */}
-            <ThemedText style={{ fontSize: 28, fontWeight: "800" }}>
-              {txId
-                ? kind === "DEPOSIT"
-                  ? "Editar depósito"
-                  : "Editar gasto"
-                : kind === "DEPOSIT"
-                ? "Nuevo depósito"
-                : "Nuevo gasto"}
-            </ThemedText>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <ThemedView style={{ flex: 1 }}>
+            {/* Header */}
+            <View style={{ paddingHorizontal: 18, paddingBottom: 12 }}>
+              <ThemedText style={{ fontSize: 34, fontWeight: "900" }}>
+                {type === "DEPOSIT" ? t("tx.newDeposit") : t("tx.newExpense")}
+              </ThemedText>
+            </View>
 
-            {/* Selector tipo */}
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              {(["DEPOSIT", "EXPENSE"] as TxKind[]).map((t) => (
+            <ScrollView
+              contentContainerStyle={{
+                paddingHorizontal: 18,
+                paddingBottom: 28,
+                gap: 16,
+              }}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Tabs Depósito/Gasto */}
+              <View style={{ flexDirection: "row", gap: 12 }}>
                 <Pressable
-                  key={t}
-                  onPress={() => setKind(t)}
+                  onPress={() => setType("DEPOSIT")}
                   style={{
                     flex: 1,
+                    height: 52,
                     borderRadius: 14,
-                    paddingVertical: 10,
                     alignItems: "center",
-                    backgroundColor: kind === t ? tokens.card : "transparent",
+                    justifyContent: "center",
+                    backgroundColor: type === "DEPOSIT" ? "#122917" : tokens.card,
                     borderWidth: 1,
-                    borderColor:
-                      kind === t ? tokens.card : "rgba(255,255,255,0.1)",
+                    borderColor: type === "DEPOSIT" ? "#214D2D" : tokens.border,
                   }}
                 >
-                  <ThemedText
-                    style={{
-                      fontWeight: "700",
-                      color:
-                        t === "DEPOSIT"
-                          ? kind === t
-                            ? "#22c55e"
-                            : tokens.text
-                          : kind === t
-                          ? "#ef4444"
-                          : tokens.text,
-                    }}
-                  >
-                    {t === "DEPOSIT" ? "Depósito" : "Gasto"}
+                  <ThemedText style={{ fontWeight: "800", color: type === "DEPOSIT" ? "#22c55e" : tokens.text }}>
+                    {t("tx.deposit")}
                   </ThemedText>
                 </Pressable>
-              ))}
-            </View>
 
-            {/* Monto con ícono $ */}
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: tokens.card,
-                borderRadius: 16,
-                paddingHorizontal: 14,
-                paddingVertical: 10,
-              }}
-            >
-              <ThemedText style={{ fontSize: 22, marginRight: 8, opacity: 0.8 }}>
-                $
-              </ThemedText>
-              <Input
-                value={amount}
-                onChangeText={formatNumber}
-                placeholder="Monto"
-                keyboardType="number-pad"
-                style={{ flex: 1, fontSize: 22 }}
-              />
-            </View>
-
-            {/* Categorías con íconos */}
-            <View style={{ gap: 10 }}>
-              <ThemedText style={{ opacity: 0.7 }}>
-                Selecciona una categoría
-              </ThemedText>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                {categories.map((c) => (
-                  <Pressable
-                    key={c.value}
-                    onPress={() => setCategory(c.value)}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      borderRadius: 12,
-                      backgroundColor:
-                        category === c.value
-                          ? kind === "DEPOSIT"
-                            ? "rgba(34,197,94,0.2)"
-                            : "rgba(239,68,68,0.2)"
-                          : tokens.card,
-                      borderWidth: category === c.value ? 1.5 : 0.5,
-                      borderColor:
-                        category === c.value
-                          ? kind === "DEPOSIT"
-                            ? "#22c55e"
-                            : "#ef4444"
-                          : "rgba(255,255,255,0.1)",
-                    }}
-                  >
-                    <Ionicons
-                      name={c.icon as any}
-                      size={18}
-                      color={
-                        category === c.value
-                          ? kind === "DEPOSIT"
-                            ? "#22c55e"
-                            : "#ef4444"
-                          : tokens.text
-                      }
-                    />
-                    <ThemedText
-                      style={{
-                        color:
-                          category === c.value
-                            ? kind === "DEPOSIT"
-                              ? "#22c55e"
-                              : "#ef4444"
-                            : tokens.text,
-                        fontWeight: category === c.value ? "700" : "500",
-                      }}
-                    >
-                      {c.label}
-                    </ThemedText>
-                  </Pressable>
-                ))}
+                <Pressable
+                  onPress={() => setType("EXPENSE")}
+                  style={{
+                    flex: 1,
+                    height: 52,
+                    borderRadius: 14,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: type === "EXPENSE" ? "#2A1313" : tokens.card,
+                    borderWidth: 1,
+                    borderColor: type === "EXPENSE" ? "#4C1D1D" : tokens.border,
+                  }}
+                >
+                  <ThemedText style={{ fontWeight: "800", color: type === "EXPENSE" ? "#ef4444" : tokens.text }}>
+                    {t("tx.expense")}
+                  </ThemedText>
+                </Pressable>
               </View>
-            </View>
 
-            {/* Descripción */}
-            <Input
-              value={desc}
-              onChangeText={setDesc}
-              placeholder="Descripción (opcional)"
-              returnKeyType="done"
-              onSubmitEditing={onSave}
-            />
+              {/* Monto */}
+              <Input
+                placeholder={formatMoney(0, currency, lang)}
+                value={amountDisplay}
+                onChangeText={handleAmountChange}
+                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                leftIcon={<Ionicons name="cash-outline" size={18} color={tokens.text} />}
+              />
 
-            {/* Botón Guardar */}
-            <Button
-              title={saving ? "Guardando..." : txId ? "Guardar cambios" : "Guardar"}
-              kind="primary"
-              style={{ marginTop: 8, opacity: valid ? 1 : 0.5 }}
-              onPress={valid ? onSave : () => {}}
-              loading={saving}
-            />
-          </ScrollView>
-        </Pressable>
+              {/* Categorías */}
+              <View style={{ gap: 10 }}>
+                <ThemedText style={{ opacity: 0.8, fontWeight: "700" }}>
+                  {t("tx.selectCategory")}
+                </ThemedText>
+
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                  {CATS.map((c) => {
+                    const selected = category === c.key;
+                    const label = lang.startsWith("es") ? c.labelES : c.labelEN;
+                    return (
+                      <Pressable
+                        key={c.key}
+                        onPress={() => setCategory(selected ? null : c.key)}
+                        style={{
+                          paddingVertical: 10,
+                          paddingHorizontal: 14,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: selected ? tokens.primary : tokens.border,
+                          backgroundColor: selected ? "#2A2754" : "transparent",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <Ionicons
+                          name={c.icon}
+                          size={16}
+                          color={selected ? tokens.primary : tokens.text}
+                        />
+                        <ThemedText style={{ fontWeight: "700" }}>{label}</ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Descripción */}
+              <View style={{ gap: 6 }}>
+                <Input
+                  placeholder={t("tx.descriptionOptional")}
+                  value={desc}
+                  onChangeText={setDesc}
+                  leftIcon={<Ionicons name="create-outline" size={18} color={tokens.text} />}
+                  multiline
+                  style={{ paddingTop: 12 }}
+                />
+                <ThemedText style={{ alignSelf: "flex-end", opacity: 0.5 }}>
+                  {Math.max(0, 120 - (desc?.length || 0))} {t("tx.characters")}
+                </ThemedText>
+              </View>
+
+              {/* Guardar */}
+              <Button
+                title={t("tx.save")}
+                onPress={handleSave}
+                loading={saving}
+                disabled={!isValid}
+                variant="primary"
+                style={{ marginTop: 8 }}
+              />
+            </ScrollView>
+          </ThemedView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-    </ThemedView>
+    </SafeAreaView>
   );
 }
